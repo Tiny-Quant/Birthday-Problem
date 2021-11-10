@@ -1,0 +1,282 @@
+---
+title: "The Birthday Problem"
+author: "Art Tay"
+date: "5/23/2020"
+output: html_document
+---
+
+Problem: How many people need to be in a room in order for there to be a greater than 
+         1/2 probability that at least two of them have the same birthday?  
+         
+First lets start by defining some helpful functions 
+```{r}
+#generates random birthdays for n people 
+birthday = function (n){
+  sample(1:365, size = n, replace = T)
+}
+
+#checks if there is at least one matching birthday in a given array 
+ismatch = function (n){
+  for(i in (1:(length(n) - 1))){
+    #print(i)
+    for(j in (i + 1):length(n)){
+      #print(j)
+      if(n[i] == n[j]){
+        return(TRUE)
+      }
+    }
+  }
+  return(FALSE)
+}
+
+```
+
+Our Theoretical Solution 
+$P_{n} = 1 - (\frac{364}{365})^{\binom{n}{2}}$
+
+```{r}
+#caculate the theoretical probability for a room of k people
+tprob = function(k){
+  p = 1 - ((364/365)^(choose(k,2)))
+  return(p)
+}
+```
+
+Morrin's Theoretical Solution 
+$P_{n} = 1-\Pi^{n-1}_{n=1}\frac{365-n}{365}$
+
+Let's code Morrin's Theoretical Model 
+```{r}
+morrinModel = function(n){
+  if(n == 0 || n == 1)
+    return(0)
+  not = 1
+  for(i in 1:(n-1)){
+    not = not * ((365-i)/365)  
+  }
+  return (1 - not)
+}
+```
+
+
+Lets run a simulation to check our theoretical probability formula for different numbers of people  
+```{r}
+#loop to simulate
+loopControl = 2
+
+#my model 
+theoryP = vector()
+theoryP[1] = 0
+
+#morrin 
+morrinP = vector()
+morrinP[1] = 0
+
+#experimental
+prob = vector()
+prob[1] = 0
+
+
+while (loopControl <= 100)
+{
+  theoryP[loopControl] = tprob(loopControl)
+  morrinP[loopControl] = morrinModel(loopControl)
+  
+  countFalse = 0 
+  countTrue = 0
+  for(i in 1:10000){
+    x = birthday(loopControl)
+    y = ismatch(x)
+  
+    if(y == TRUE)
+      countTrue = countTrue + 1
+    if(y == FALSE)
+      countFalse = countFalse + 1
+  }
+
+  prob[loopControl] = countTrue/(countTrue + countFalse)
+  
+  loopControl = loopControl + 1
+}
+
+```
+
+Visualize the data
+```{r}
+library(tidyverse)
+library(ggplot2)
+Theoretical_Probability = data.frame(theoryP)
+morrin_Probability = data.frame(morrinP)
+Simulated_Probability = data.frame(prob)
+
+df = cbind(Simulated_Probability,Theoretical_Probability, morrin_Probability)
+colnames(df) = c("Simulated Probability", "Theoretical Probability", "Morrin Probability")
+df$Perecent_Error_My_Model = ((df$`Theoretical Probability`- df$`Simulated Probability`)/(df$`Theoretical Probability`)) * 100
+df$index = 1:100
+df$Perecent_Error_Morrin = ((df$`Morrin Probability`- df$`Simulated Probability`)/(df$`Morrin Probability`))* 100
+
+#Error Plots 
+plot(df$Perecent_Error_My_Model, main = "Percent Error between My Model and Experimental Values", xlab = "Number of People",
+     ylab = "My Model - Experimental")
+abline(h = 0, col = "red")
+
+plot(df$Perecent_Error_Morrin, main = "Percent Error between Morin's Model and Experimental Values", 
+     xlab = "Number of People", ylab = "My Model - Experimental")
+abline(h = 0, col = "red")
+
+```
+
+
+```{r}
+dfModified = df %>% 
+  select(index, `Simulated Probability`, `Theoretical Probability`, `Morrin Probability`) %>% 
+  gather(key = "Type", value = "Probability", -index)
+
+plot1 = ggplot(dfModified, aes(x = index, y = Probability, col = Type, shape = Type)) + geom_point()
+plot1
+```
+
+Simulate Rooms of 23 people to test Theoretical models against each other 
+```{r}
+startSize = 2 
+trials = 1000
+sample_size = 1000
+roomSize = 23
+
+#calculate theoretical values 
+morrin = morrinModel(roomSize)
+myModel = tprob(roomSize)
+
+#simulate experiemental data to test against 
+
+expProb2 = vector()
+#expProb3 = vector()
+
+loopcontrol2 = 1 
+while(loopcontrol2 <= 1000){
+  countFalse = 0 
+  countTrue = 0
+  for(i in 1:1000){
+    x = birthday(roomSize)
+    y = ismatch(x)
+  
+    if(y == TRUE)
+      countTrue = countTrue + 1
+    if(y == FALSE)
+      countFalse = countFalse + 1
+  }
+
+  expProb2[loopcontrol2] = countTrue/(countTrue + countFalse)
+  
+  loopcontrol2 = loopcontrol2 + 1 
+}
+
+#plot a histogram of sampling distribution 
+expData = data.frame(expProb2)
+
+hist1000x1000 = ggplot(expData, aes(x = expProb2)) + geom_histogram(aes(y = ..density..), fill = "blue")
+hist1000x1000 = hist1000x1000 + stat_function(fun = dnorm, args = list(mean = mean(expProb2), sd = sd(expProb2)), col = "red", size = 2)
+hist1000x1000 = hist1000x1000 + geom_vline(xintercept = mean(expProb2), col = "green", size = 1.5)
+hist1000x1000 = hist1000x1000 + geom_vline(xintercept = mean((expProb2) + sd(expProb2)), col = "green", size = 1.5)
+hist1000x1000 = hist1000x1000 + geom_vline(xintercept = mean((expProb2) - sd(expProb2)), col = "green", size = 1.5)
+hist1000x1000 + ggtitle("1000x1000 Experimental Histogram")
+
+# expData3 = data.frame(expProb3)
+# hist10000x1000 = ggplot(expData3, aes(x = expProb3)) + geom_histogram(aes(y = ..density..), fill = "blue")
+# hist10000x1000 = hist10000x1000 + stat_function(fun = dnorm, args = list(mean = mean(expProb3), sd = sd(expProb3)), col = "red", size = 2)
+# hist10000x1000 = hist10000x1000 + geom_vline(xintercept = mean(expProb3), col = "green", size = 1.5)
+# hist10000x1000 = hist10000x1000 + geom_vline(xintercept = mean((expProb3) + sd(expProb3)), col = "green", size = 1.5)
+# hist10000x1000 = hist10000x1000 + geom_vline(xintercept = mean((expProb3) - sd(expProb3)), col = "green", size = 1.5)
+# hist10000x1000
+
+
+```
+
+
+Statistical Significance Test
+```{r}
+#Perform a t-test assuming that the theoretical value is the null. 
+
+#My Model 
+null1 = tprob(roomSize)
+myTest = t.test(x = expProb2, mu = null1)
+myTest 
+
+#Morin's Model 
+null2 = morrinModel(roomSize)
+morinTest = t.test(x = expProb2, mu = null2)
+morinTest
+```
+
+
+Conclusion: Although our model shares a similar error profile as Morin's model at small values of n, Morin's model is 
+clearly a better theoretical solution to the problem statement. Furthermore, although our model was able to correct answer 
+posed question, it is extremely ineffective at predicting the exact probablity. More specific for medium values of n, 
+say 25-75, our model consistently underestimates the probability of finding at least one pair. Based on a two-sided 
+t test, it is extreme unlikely that proability our model predicts for a room of 23 people is correct (p < 2.2e -16). 
+
+```{r}
+#exactly one pair 
+
+noPair21 = 1 
+for(i in 1:21){
+  noPair21 = noPair21 *((365-i)/365) 
+}
+noPair21
+
+guessProb = noPair21 * 210 * (1/365)
+guessProb
+
+numPairs = function(n){
+  count = 0
+  for(i in 1:(length(n) - 1)){
+    for(j in (i + 1):length(n)){
+      if(n[i] == n[j])
+        count = count + 1 
+    }
+  }
+  return(count)
+}
+
+# x = birthday(23)
+# x
+# numPairs(x)
+```
+
+simulate and check the number of times we get exactly one pair 
+```{r}
+
+expProb4 = vector()
+loopcontrol3 = 0 
+while(loopcontrol3 <= 10000){
+  countFalse = 0 
+  countTrue = 0
+  for(i in 1:1000){
+    x = birthday(23)
+    y = numPairs(x)
+  
+    if(y == 1)
+      countTrue = countTrue + 1
+    else
+      countFalse = countFalse + 1
+  }
+
+  expProb4[loopcontrol3] = countTrue/(countTrue + countFalse)
+  
+  loopcontrol3 = loopcontrol3 + 1 
+}
+
+mean(expProb4)
+df4 = data.frame(expProb4)
+ggplot(data = df4, aes(x = df4$expProb4)) + geom_histogram(aes(y = ..density..)) 
+
+```
+
+Statistical Test against our theoretical guess 
+```{r}
+
+guess = noPair21 * (1/365) * choose(23,2)
+
+#t-test 
+t.test(x = expProb4, mu = guess)
+```
